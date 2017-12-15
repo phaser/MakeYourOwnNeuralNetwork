@@ -1,6 +1,7 @@
 ﻿using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using System;
+using System.IO;
 
 namespace MakeYourOwnNeuralNet
 {
@@ -10,8 +11,10 @@ namespace MakeYourOwnNeuralNet
         private int NumberOfInputNodes;
         private int NumberOfHiddenNodes;
         private int NumberOfOutputNodes;
+        private DenseVector one_vector_output;
         private Matrix<double> W_input_hidden;
         private Matrix<double> W_hiddhen_output;
+        private DenseVector one_vector_hidden;
         private Random rndGen;
         
         public ActivationFunctionDelegate ActivationFunction { set; get; }
@@ -22,15 +25,23 @@ namespace MakeYourOwnNeuralNet
             this.NumberOfInputNodes = NumberOfInputNodes;
             this.NumberOfHiddenNodes = NumberOfHiddenNodes;
             this.NumberOfOutputNodes = NumberOfOutputNodes;
+            one_vector_output = DenseVector.OfArray(new double[this.NumberOfOutputNodes]);
+            for (int i = 0; i < one_vector_output.Count; i++) { one_vector_output[i] = 1.0; }
+            one_vector_hidden = DenseVector.OfArray(new double[this.NumberOfHiddenNodes]);
+            for (int i = 0; i < one_vector_hidden.Count; i++) { one_vector_hidden[i] = 1.0; }
             rndGen = new Random();
             ActivationFunction = Sigmoid;
             LearningRate = 0.3;
+            Console.WriteLine("input nodes: " + this.NumberOfInputNodes);
+            Console.WriteLine("hidden nodes: " + this.NumberOfHiddenNodes);
+            Console.WriteLine("output nodes: " + this.NumberOfOutputNodes);
+            Console.WriteLine("learning rate: " + this.LearningRate);
         }
 
         public void Initialize()
         {
-            W_input_hidden = DenseMatrix.Build.Dense(NumberOfInputNodes, NumberOfHiddenNodes);
-            W_hiddhen_output = DenseMatrix.Build.Dense(NumberOfHiddenNodes, NumberOfOutputNodes);
+            W_input_hidden = DenseMatrix.Build.Dense(NumberOfHiddenNodes, NumberOfInputNodes);
+            W_hiddhen_output = DenseMatrix.Build.Dense(NumberOfOutputNodes, NumberOfHiddenNodes);
             InitWeightsWithRandomValues();
         }
 
@@ -50,9 +61,9 @@ namespace MakeYourOwnNeuralNet
             var output = OWHO;
             var errors_output = target - output;
             var errors_hidden = W_hiddhen_output.Transpose() * errors_output;
-
-            W_hiddhen_output += LearningRate * ((errors_output * output * (DenseVector.OfArray(new double[] { 1.0, 1.0, 1.0 }) - output)) * OWIH);
-            W_input_hidden += LearningRate * ((errors_hidden * OWIH * (DenseVector.OfArray(new double[] { 1.0, 1.0, 1.0 }) - OWIH)) * input);
+            var test = (errors_output * output * (one_vector_output - output));
+            W_hiddhen_output += LearningRate * test.ToColumnMatrix() * OWIH.ToRowMatrix();
+            W_input_hidden += LearningRate * ((errors_hidden * OWIH * (one_vector_hidden - OWIH)).ToColumnMatrix() * input.ToRowMatrix());
         }
 
         public Vector<double> Query(Vector<double> input)
@@ -81,10 +92,39 @@ namespace MakeYourOwnNeuralNet
 
         static void Main(string[] args)
         {
+            var lines = File.ReadAllLines("../mnist_train.csv");
+            Vector<double>[] train_data = new Vector<double>[lines.Length];
+            Vector<double>[] target_data = new Vector<double>[lines.Length];
+            var j = -1;
+            foreach (var line in lines)
+            {
+                var words = line.Split(',');
+                string label = words[0];
+                double[] nums = new double[words.Length - 1];
+                for (int i = 1; i < words.Length; i++)
+                {
+                    nums[i - 1] = Convert.ToDouble(words[i]);
+                    nums[i - 1] = (nums[i - 1] / 255.0) * 0.99 + 0.01; // normalize the nums to be between 0.01 - 1 (inclusive)
+                }
+                train_data[++j] = DenseVector.OfArray(nums);
+                var target = new double[10];
+                target[Convert.ToInt32(label)] = 0.99;
+                target_data[j] = DenseVector.OfArray(target);
+            }
+
             Console.WriteLine("Initialize the network...");
-            var net = new SimpleNeuralNet(3, 3, 3);
+            var net = new SimpleNeuralNet(train_data[0].Count, 280, 10);
             net.Initialize();
-            Console.WriteLine(net.Query(DenseVector.OfArray(new double[] { 1.0, 0.5, -1.5 })));
+            Console.WriteLine("start training...");
+            for (int i = 0; i < train_data.Length; i++)
+            {
+                Console.WriteLine("#" + i);
+                net.Train(train_data[i], target_data[i]);
+            }
+            // train_data = null; target_data = null; // we don't need this data from now on
+
+            Console.WriteLine(net.Query(train_data[0]));
+            Console.WriteLine(target_data[0]);
         }
     }
 }
