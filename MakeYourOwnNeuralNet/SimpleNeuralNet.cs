@@ -1,7 +1,10 @@
 ﻿using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using System;
+<<<<<<< HEAD
 using System.IO;
+=======
+>>>>>>> 2dba00cbd43764f4f8abc745d3d76790027f5cd8
 
 namespace MakeYourOwnNeuralNet
 {
