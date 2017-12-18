@@ -1,10 +1,7 @@
 ﻿using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using System;
-<<<<<<< HEAD
 using System.IO;
-=======
->>>>>>> 2dba00cbd43764f4f8abc745d3d76790027f5cd8
 
 namespace MakeYourOwnNeuralNet
 {
@@ -16,7 +13,7 @@ namespace MakeYourOwnNeuralNet
         private int NumberOfOutputNodes;
         private DenseVector one_vector_output;
         private Matrix<double> W_input_hidden;
-        private Matrix<double> W_hiddhen_output;
+        private Matrix<double> W_hidden_output;
         private DenseVector one_vector_hidden;
         private Random rndGen;
         
@@ -34,7 +31,7 @@ namespace MakeYourOwnNeuralNet
             for (int i = 0; i < one_vector_hidden.Count; i++) { one_vector_hidden[i] = 1.0; }
             rndGen = new Random();
             ActivationFunction = Sigmoid;
-            LearningRate = 0.3;
+            LearningRate = 0.1;
             Console.WriteLine("input nodes: " + this.NumberOfInputNodes);
             Console.WriteLine("hidden nodes: " + this.NumberOfHiddenNodes);
             Console.WriteLine("output nodes: " + this.NumberOfOutputNodes);
@@ -44,36 +41,51 @@ namespace MakeYourOwnNeuralNet
         public void Initialize()
         {
             W_input_hidden = DenseMatrix.Build.Dense(NumberOfHiddenNodes, NumberOfInputNodes);
-            W_hiddhen_output = DenseMatrix.Build.Dense(NumberOfOutputNodes, NumberOfHiddenNodes);
+            W_hidden_output = DenseMatrix.Build.Dense(NumberOfOutputNodes, NumberOfHiddenNodes);
             InitWeightsWithRandomValues();
+            //InitWeightsWithTestValues();
+        }
+
+        private void InitWeightsWithTestValues()
+        {
+            W_input_hidden[0, 0] = 0.9; W_input_hidden[0, 1] = 0.3; W_input_hidden[0, 2] = 0.4;
+            W_input_hidden[1, 0] = 0.2; W_input_hidden[1, 1] = 0.8; W_input_hidden[1, 2] = 0.2;
+            W_input_hidden[2, 0] = 0.1; W_input_hidden[2, 1] = 0.5; W_input_hidden[2, 2] = 0.6;
+
+            W_hidden_output[0, 0] = 0.3; W_hidden_output[0, 1] = 0.7; W_hidden_output[0, 2] = 0.5;
+            W_hidden_output[1, 0] = 0.6; W_hidden_output[1, 1] = 0.5; W_hidden_output[1, 2] = 0.2;
+            W_hidden_output[2, 0] = 0.8; W_hidden_output[2, 1] = 0.1; W_hidden_output[2, 2] = 0.9;
         }
 
         private void InitWeightsWithRandomValues()
         {
             InitMatrixWithRandom(W_input_hidden);
-            InitMatrixWithRandom(W_hiddhen_output);
+            InitMatrixWithRandom(W_hidden_output);
         }
 
         public void Train(Vector<double> input, Vector<double> target)
         {
             var OWIH = W_input_hidden * input;
             OWIH = OWIH.Map(x => ActivationFunction(x));
-            var OWHO = W_hiddhen_output * OWIH;
+            var OWHO = W_hidden_output * OWIH;
             OWHO = OWHO.Map(x => ActivationFunction(x));
 
-            var output = OWHO;
-            var errors_output = target - output;
-            var errors_hidden = W_hiddhen_output.Transpose() * errors_output;
-            var test = (errors_output * output * (one_vector_output - output));
-            W_hiddhen_output += LearningRate * test.ToColumnMatrix() * OWIH.ToRowMatrix();
-            W_input_hidden += LearningRate * ((errors_hidden * OWIH * (one_vector_hidden - OWIH)).ToColumnMatrix() * input.ToRowMatrix());
+            var errors_output = target - OWHO;
+            var errors_hidden = W_hidden_output.Transpose() * errors_output;
+            var SHO = errors_output * OWHO * (one_vector_output - OWHO);
+            var SHO_error = LearningRate * (SHO.ToColumnMatrix() * OWIH.ToRowMatrix());
+            W_hidden_output += SHO_error;
+
+            var SIH = errors_hidden * OWIH * (one_vector_hidden - OWIH);
+            var SIH_error = LearningRate * (SIH.ToColumnMatrix() * input.ToRowMatrix());
+            W_input_hidden += SIH_error; 
         }
 
         public Vector<double> Query(Vector<double> input)
         {
             var OWIH = W_input_hidden * input;
             OWIH = OWIH.Map(x => ActivationFunction(x));
-            var OWHO = W_hiddhen_output * OWIH;
+            var OWHO = W_hidden_output * OWIH;
             OWHO = OWHO.Map(x => ActivationFunction(x));
             return OWHO;
         }
@@ -95,6 +107,11 @@ namespace MakeYourOwnNeuralNet
 
         static void Main(string[] args)
         {
+            MNIST_Train();
+        }
+
+        private static void MNIST_Train()
+        {
             var lines = File.ReadAllLines("../mnist_train.csv");
             Vector<double>[] train_data = new Vector<double>[lines.Length];
             Vector<double>[] target_data = new Vector<double>[lines.Length];
@@ -111,6 +128,10 @@ namespace MakeYourOwnNeuralNet
                 }
                 train_data[++j] = DenseVector.OfArray(nums);
                 var target = new double[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    target[i] = 0.01;
+                }
                 target[Convert.ToInt32(label)] = 0.99;
                 target_data[j] = DenseVector.OfArray(target);
             }
@@ -118,16 +139,45 @@ namespace MakeYourOwnNeuralNet
             Console.WriteLine("Initialize the network...");
             var net = new SimpleNeuralNet(train_data[0].Count, 280, 10);
             net.Initialize();
-            Console.WriteLine("start training...");
+            for (int k = 0; k < 2; k++)
+            {
+                Console.WriteLine("start training: epoch[" + (k+1) + "]");
+                for (int i = 0; i < train_data.Length; i++)
+                {
+                    net.Train(train_data[i], target_data[i]);
+                }
+            }
+
+            Console.WriteLine("Testing...");
+            int right = 0;
             for (int i = 0; i < train_data.Length; i++)
             {
-                Console.WriteLine("#" + i);
-                net.Train(train_data[i], target_data[i]);
-            }
-            // train_data = null; target_data = null; // we don't need this data from now on
+                Console.WriteLine("Test #" + (i + 1));
+                int right_answer = 0;
+                for (int k = 0; k < target_data[i].Count; k++)
+                {
+                    if (target_data[i][k] > 0.98)
+                    {
+                        right_answer = k;
+                        break;
+                    }
+                }
 
-            Console.WriteLine(net.Query(train_data[0]));
-            Console.WriteLine(target_data[0]);
+                var answer = net.Query(train_data[i]);
+                int max = 0;
+                for (int k = 1; k < answer.Count; k++)
+                {
+                    if (answer[k] > answer[max])
+                    {
+                        max = k;
+                    }
+                }
+
+                right += (max == right_answer ? 1 : 0);
+                Console.WriteLine("Result: " + max + " " + right_answer + " " + (max == right_answer ? "RIGHT" : "WRONG"));
+            }
+
+            Console.WriteLine("Accuracy: " + ((double)right / (double)train_data.Length));
         }
     }
 }
