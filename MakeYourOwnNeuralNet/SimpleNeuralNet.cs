@@ -65,29 +65,30 @@ namespace MakeYourOwnNeuralNet
 
         public void Train(Vector<double> input, Vector<double> target)
         {
-            var OWIH = W_input_hidden * input;
+            var OWIH = W_input_hidden * input.ToColumnMatrix();
             OWIH = OWIH.Map(x => ActivationFunction(x));
             var OWHO = W_hidden_output * OWIH;
             OWHO = OWHO.Map(x => ActivationFunction(x));
 
-            var errors_output = target - OWHO;
+            var errors_output = target.ToColumnMatrix() - OWHO;
             var errors_hidden = W_hidden_output.Transpose() * errors_output;
-            var SHO = errors_output * OWHO * (one_vector_output - OWHO);
-            var SHO_error = LearningRate * (SHO.ToColumnMatrix() * OWIH.ToRowMatrix());
+            var oneminus = (one_vector_output.ToColumnMatrix() - OWHO);
+            var SHO = errors_output.PointwiseMultiply(OWHO).PointwiseMultiply(oneminus);
+            var SHO_error = LearningRate * (SHO * OWIH.Transpose());
             W_hidden_output += SHO_error;
 
-            var SIH = errors_hidden * OWIH * (one_vector_hidden - OWIH);
-            var SIH_error = LearningRate * (SIH.ToColumnMatrix() * input.ToRowMatrix());
+            var SIH = errors_hidden.PointwiseMultiply(OWIH).PointwiseMultiply((one_vector_hidden.ToColumnMatrix() - OWIH));
+            var SIH_error = LearningRate * (SIH * input.ToRowMatrix());
             W_input_hidden += SIH_error; 
         }
 
         public Vector<double> Query(Vector<double> input)
         {
-            var OWIH = W_input_hidden * input;
+            var OWIH = W_input_hidden * input.ToColumnMatrix();
             OWIH = OWIH.Map(x => ActivationFunction(x));
             var OWHO = W_hidden_output * OWIH;
             OWHO = OWHO.Map(x => ActivationFunction(x));
-            return OWHO;
+            return DenseVector.OfArray(OWHO.ToColumnMajorArray());
         }
 
         private void InitMatrixWithRandom(Matrix<double> mat)
@@ -95,14 +96,14 @@ namespace MakeYourOwnNeuralNet
             var cols = mat.AsColumnMajorArray();
             for (int i = 0; i < mat.ColumnCount * mat.RowCount; i++)
             {
-                cols[i] = rndGen.NextDouble() - 0.5;
+                cols[i] = rndGen.NextDouble() - 0.49;
             }
         }
 
         private double Sigmoid(double x)
         {
-            double ex = Math.Pow(Math.E, x);
-            return ex / (ex + 1);
+            double ex = Math.Pow(Math.E, -x);
+            return 1 / (ex + 1);
         }
 
         static void Main(string[] args)
@@ -137,9 +138,9 @@ namespace MakeYourOwnNeuralNet
             }
 
             Console.WriteLine("Initialize the network...");
-            var net = new SimpleNeuralNet(train_data[0].Count, 280, 10);
+            var net = new SimpleNeuralNet(train_data[0].Count, 200, 10);
             net.Initialize();
-            for (int k = 0; k < 2; k++)
+            for (int k = 0; k < 5; k++)
             {
                 Console.WriteLine("start training: epoch[" + (k+1) + "]");
                 for (int i = 0; i < train_data.Length; i++)
@@ -149,6 +150,31 @@ namespace MakeYourOwnNeuralNet
             }
 
             Console.WriteLine("Testing...");
+            lines = File.ReadAllLines("../mnist_test.csv");
+            train_data = new Vector<double>[lines.Length];
+            target_data = new Vector<double>[lines.Length];
+            j = -1;
+            foreach (var line in lines)
+            {
+                var words = line.Split(',');
+                string label = words[0];
+                double[] nums = new double[words.Length - 1];
+                for (int i = 1; i < words.Length; i++)
+                {
+                    nums[i - 1] = Convert.ToDouble(words[i]);
+                    nums[i - 1] = (nums[i - 1] / 255.0) * 0.99 + 0.01; // normalize the nums to be between 0.01 - 1 (inclusive)
+                }
+                train_data[++j] = DenseVector.OfArray(nums);
+                var target = new double[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    target[i] = 0.01;
+                }
+                target[Convert.ToInt32(label)] = 0.99;
+                target_data[j] = DenseVector.OfArray(target);
+            }
+            lines = null;
+
             int right = 0;
             for (int i = 0; i < train_data.Length; i++)
             {
