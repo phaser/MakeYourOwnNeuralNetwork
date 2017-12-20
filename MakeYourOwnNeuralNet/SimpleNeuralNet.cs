@@ -1,10 +1,19 @@
 ﻿using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
+using Newtonsoft.Json;
 using System;
 using System.IO;
 
 namespace MakeYourOwnNeuralNet
 {
+    class SimpleNeuralNetModel
+    {
+        public int W_input_hidden_rows, W_input_hidden_cols;
+        public int W_hidden_output_rows, W_hidden_output_cols;
+        public double[] W_input_hidden;
+        public double[] W_hidden_output;
+    }
+
     class SimpleNeuralNet
     {
         public delegate double ActivationFunctionDelegate(double x);
@@ -91,7 +100,26 @@ namespace MakeYourOwnNeuralNet
         private double Sigmoid(double x)
         {
             double ex = Math.Pow(Math.E, -x);
-            return 1 / (ex + 1);
+            return 1.0 / (ex + 1.0);
+        }
+
+        public void SaveModel(string file)
+        {
+            SimpleNeuralNetModel model = new SimpleNeuralNetModel();
+            model.W_input_hidden_rows = W_input_hidden.RowCount;
+            model.W_input_hidden_cols = W_input_hidden.ColumnCount;
+            model.W_input_hidden = W_input_hidden.AsColumnMajorArray();
+            model.W_hidden_output_rows = W_hidden_output.RowCount;
+            model.W_hidden_output_cols = W_hidden_output.ColumnCount;
+            model.W_hidden_output = W_hidden_output.AsColumnMajorArray();
+            File.WriteAllText(file, JsonConvert.SerializeObject(model));
+        }
+
+        public void LoadModel(string file)
+        {
+            var model = JsonConvert.DeserializeObject<SimpleNeuralNetModel>(File.ReadAllText(file));
+            W_input_hidden = DenseMatrix.OfColumnMajor(model.W_input_hidden_rows, model.W_input_hidden_cols, model.W_input_hidden);
+            W_hidden_output = DenseMatrix.OfColumnMajor(model.W_hidden_output_rows, model.W_hidden_output_cols, model.W_hidden_output);
         }
     }
 }
