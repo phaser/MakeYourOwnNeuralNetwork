@@ -11,18 +11,19 @@ namespace MakeYourOwnNeuralNet
         {
             //var net = MNIST_Train();
             //net.SaveModel("MNIST_model.json");
+            //net.SaveModel("../MNIST_model.json");
             var net = new SimpleNeuralNet(784, 200, 10);
             net.Initialize();
             net.LoadModel("../MNIST_model.json");
-            MNIST_Test(net);
+            Kaggle_MNIST_Test(net);
         }
 
         private static void MNIST_Test(SimpleNeuralNet net)
         {
 
             Console.WriteLine("Testing...");
-            //string fname = "../mnist_test.csv";
-            string fname = "../my_test_data.csv";
+            string fname = "../mnist_test.csv";
+            //string fname = "../my_test_data.csv";
             //string fname = "../mnist_train.csv";
 
             var lines = File.ReadAllLines(fname);
@@ -79,6 +80,54 @@ namespace MakeYourOwnNeuralNet
             }
 
             Console.WriteLine("Accuracy: " + ((double)right / (double)train_data.Length));
+        }
+
+        private static void Kaggle_MNIST_Test(SimpleNeuralNet net)
+        {
+
+            Console.WriteLine("Testing...");
+            string fname = "../kaggle_mnist_test.csv";
+            //string fname = "../my_test_data.csv";
+            //string fname = "../mnist_train.csv";
+
+            var lines = File.ReadAllLines(fname);
+            var train_data = new Vector<double>[lines.Length - 1];
+            var j = -1;
+            foreach (var line in lines)
+            {
+                if (line.Contains("pixel"))
+                    continue;
+                if (string.IsNullOrEmpty(line))
+                    continue;
+
+                var words = line.Split(',');
+                string label = words[0];
+                double[] nums = new double[words.Length];
+                for (int i = 0; i < words.Length; i++)
+                {
+                    nums[i] = Convert.ToDouble(words[i]);
+                    nums[i] = (nums[i] / 255.0) * 0.99 + 0.01; // normalize the nums to be between 0.01 - 1 (inclusive)
+                }
+                train_data[++j] = DenseVector.OfArray(nums);
+            }
+            lines = null;
+
+            int right = 0;
+            string fileContents = "ImageId,Label\n";
+            for (int i = 0; i < train_data.Length; i++)
+            {
+                var answer = net.Query(train_data[i]);
+                int max = 0;
+                for (int k = 1; k < answer.Count; k++)
+                {
+                    if (answer[k] > answer[max])
+                    {
+                        max = k;
+                    }
+                }
+                fileContents += (i + 1) + "," + max + "\n";
+            }
+            File.WriteAllText("../kaggle_mnist_answer.csv", fileContents);
         }
 
         private static SimpleNeuralNet MNIST_Train(int epochs = 10)
